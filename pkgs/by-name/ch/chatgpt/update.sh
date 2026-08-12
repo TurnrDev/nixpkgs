@@ -1,23 +1,25 @@
 #!/usr/bin/env nix-shell
-#!nix-shell -i bash -p curl libxml2
+#!nix-shell -i bash -p curl dpkg
 
-XML_URL="https://persistent.oaistatic.com/sidekick/public/sparkle_public_appcast.xml"
+set -euo pipefail
 
-XML_DATA=$(curl -s $XML_URL)
+url="https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_amd64.deb"
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
 
-LATEST_VERSION=$(echo "$XML_DATA" | xmllint --xpath '/rss/channel/item[1]/*[local-name()="shortVersionString"]/text()' -)
-DOWNLOAD_URL=$(echo "$XML_DATA" | xmllint --xpath 'string(//item[1]/enclosure/@url)' -)
+curl --fail --location --output "$tmpdir/chatgpt_amd64.deb" "$url"
 
-HASH=$(nix-prefetch-url $DOWNLOAD_URL | xargs nix --extra-experimental-features nix-command hash convert --hash-algo sha256)
+version=$(dpkg-deb --field "$tmpdir/chatgpt_amd64.deb" Version)
+hash=$(nix hash file "$tmpdir/chatgpt_amd64.deb")
 
 SOURCE_NIX="$(dirname ${BASH_SOURCE[0]})/source.nix"
 
 cat > "${SOURCE_NIX}" << _EOF_
 {
-  version = "$LATEST_VERSION";
+  version = "$version";
   src = {
-    url = "$DOWNLOAD_URL";
-    hash = "$HASH";
+    url = "$url";
+    hash = "$hash";
   };
 }
 _EOF_
